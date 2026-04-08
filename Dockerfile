@@ -18,8 +18,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /app/logs && chown qoder:qoder /app/logs
-
 USER qoder
 EXPOSE 11435
 
