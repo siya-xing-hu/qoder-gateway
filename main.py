@@ -7,6 +7,7 @@ OpenAI-compatible proxy server for Qoder CLI.
 """
 
 import argparse
+import os
 import sys
 
 import uvicorn
@@ -20,6 +21,7 @@ from qoder.config import (
     SERVER_HOST,
     SERVER_PORT,
     LOG_LEVEL,
+    LOG_DIR,
     QODER_PROXY_API_KEY,
 )
 from qoder.routes import router
@@ -85,6 +87,19 @@ def main():
     # Configure loguru
     logger.remove()
     logger.add(sys.stderr, level=args.log_level.upper())
+
+    # Add file logging
+    if LOG_DIR:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        logger.add(
+            os.path.join(LOG_DIR, "qoder-gateway_{time:YYYY-MM-DD}.log"),
+            level=args.log_level.upper(),
+            rotation="00:00",
+            retention="30 days",
+            compression="gz",
+            encoding="utf-8",
+        )
+        logger.info(f"File logging enabled: {LOG_DIR}/")
 
     logger.info(f"Starting server at http://{args.host}:{args.port}")
 

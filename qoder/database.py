@@ -95,7 +95,7 @@ async def save_log(
     response_summary: Optional[str] = None,
     error_message: Optional[str] = None,
 ) -> None:
-    """Save a request log entry to the database."""
+    """Save a complete request log entry to the database (one-shot)."""
     if not is_db_available():
         return
 
@@ -120,6 +120,76 @@ async def save_log(
             await session.commit()
     except Exception as e:
         logger.warning(f"Failed to save request log to database: {e}")
+
+
+async def save_request(
+    method: str,
+    path: str,
+    client_ip: str,
+    request_model: Optional[str] = None,
+    request_messages_count: Optional[int] = None,
+    request_stream: Optional[bool] = None,
+    request_body: Optional[str] = None,
+) -> Optional[int]:
+    """
+    Save the request part immediately when a request arrives.
+
+    Returns:
+        The log entry ID, or None if save failed.
+    """
+    if not is_db_available():
+        return None
+
+    try:
+        async with _async_session_factory() as session:
+            result = await session.execute(
+                request_logs.insert().values(
+                    timestamp=datetime.now(timezone.utc),
+                    method=method,
+                    path=path,
+                    status_code=0,  # pending
+                    duration_ms=0,
+                    client_ip=client_ip,
+                    request_model=request_model,
+                    request_messages_count=request_messages_count,
+                    request_stream=request_stream,
+                    request_body=request_body[:10000] if request_body else None,
+                )
+            )
+            await session.commit()
+            return result.inserted_primary_key[0]
+    except Exception as e:
+        logger.warning(f"Failed to save request log: {e}")
+        return None
+
+
+async def update_response(
+    log_id: int,
+    status_code: int,
+    duration_ms: float,
+    response_summary: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> None:
+    """Update an existing log entry with response data."""
+    if not is_db_available() or log_id is None:
+        return
+
+    try:
+        from sqlalchemy import update
+        async with _async_session_factory() as session:
+            await session.execute(
+                update(request_logs)
+                .where(request_logs.c.id == log_id)
+                .values(
+                    status_code=status_code,
+                    duration_ms=round(duration_ms, 2),
+                    response_summary=response_summary[:2000] if response_summary else None,
+                    error_message=error_message[:2000] if error_message else None,
+                )
+            )
+            await session.commit()
+    except Exception as e:
+        logger.warning(f"Failed to update response log (id={log_id}): {e}")
 
 
 async def get_logs(

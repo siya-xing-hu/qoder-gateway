@@ -5,6 +5,10 @@ Request/Response logging middleware.
 
 Intercepts all /v1/ requests, logs timing, status, and request details.
 Always logs to console via loguru; persists to database if configured.
+
+Two-phase database logging:
+  Phase 1: Save request immediately when it arrives (status_code=0)
+  Phase 2: Update with response data when response is complete
 """
 
 import json
@@ -16,7 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import StreamingResponse
 from loguru import logger
 
-from qoder.database import save_log
+from qoder.database import save_request, update_response
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -52,6 +56,17 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         except Exception:
             pass
 
+        # Phase 1: Save request immediately
+        log_id = await save_request(
+            method=method,
+            path=path,
+            client_ip=client_ip,
+            request_model=request_model,
+            request_messages_count=request_messages_count,
+            request_stream=request_stream,
+            request_body=request_body_text,
+        )
+
         # Call the actual endpoint
         status_code = 500
         response_summary = None
@@ -63,7 +78,6 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
             # For non-streaming responses, capture response summary
             if not isinstance(response, StreamingResponse) or "text/event-stream" not in (response.media_type or ""):
-                # Read and re-create the response body
                 response_body = b""
                 async for chunk in response.body_iterator:
                     if isinstance(chunk, str):
@@ -80,7 +94,6 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 except Exception:
                     response_summary = f"<binary {len(response_body)} bytes>"
 
-                # Re-create the response with the same body
                 from starlette.responses import Response as StarletteResponse
                 response = StarletteResponse(
                     content=response_body,
@@ -99,17 +112,11 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 f"{model_tag}{stream_tag}"
             )
 
-            # Database log
-            await save_log(
-                method=method,
-                path=path,
+            # Phase 2: Update with response data
+            await update_response(
+                log_id=log_id,
                 status_code=status_code,
                 duration_ms=duration_ms,
-                client_ip=client_ip,
-                request_model=request_model,
-                request_messages_count=request_messages_count,
-                request_stream=request_stream,
-                request_body=request_body_text,
                 response_summary=response_summary,
             )
 
@@ -123,16 +130,11 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 f"{method} {path} -> ERROR ({duration_ms:.0f}ms): {error_message}"
             )
 
-            await save_log(
-                method=method,
-                path=path,
+            # Phase 2: Update with error data
+            await update_response(
+                log_id=log_id,
                 status_code=status_code,
                 duration_ms=duration_ms,
-                client_ip=client_ip,
-                request_model=request_model,
-                request_messages_count=request_messages_count,
-                request_stream=request_stream,
-                request_body=request_body_text,
                 error_message=error_message,
             )
 

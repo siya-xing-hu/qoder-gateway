@@ -66,6 +66,7 @@ FIRST_TOKEN_MAX_RETRIES: int = int(os.getenv("QODER_FIRST_TOKEN_MAX_RETRIES", "3
 # ==================================================================================================
 
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_DIR: Optional[str] = os.getenv("LOG_DIR", "logs")
 
 
 # ==================================================================================================
