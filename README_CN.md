@@ -199,17 +199,31 @@ cp .env.example .env
 | `QODER_STREAMING_READ_TIMEOUT` | 流式读取超时时间（秒） | `300` |
 | `QODER_FIRST_TOKEN_MAX_RETRIES` | 流式请求最大重试次数 | `3` |
 
-### 数据库（可选）
+### 工作区与日志
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
+| `QODER_WORKSPACE` | qodercli 工作目录 — 生成的代码存放在此 | `/home/qoder/repo` |
+| `LOG_DIR` | 日志文件输出目录 | `logs` |
 | `DATABASE_URL` | PostgreSQL 连接 URL | —（仅输出到控制台） |
 
-> 使用 Docker Compose 时，`DATABASE_URL` 会自动配置为内置的 PostgreSQL 实例。
+> 使用 Docker Compose 时，`QODER_WORKSPACE`、`LOG_DIR` 和 `DATABASE_URL` 会自动配置。生成的代码映射到宿主机 `~/qoder/repo`，日志映射到 `~/logs`。
 
 ---
 
 ## 🐳 Docker 部署
+
+### 目录挂载
+
+Docker Compose 在容器和宿主机之间映射了三个目录：
+
+| 容器内路径 | 宿主机路径 | 用途 |
+|-----------|-----------|------|
+| `/app` | `.`（项目目录） | 应用源代码 — 修改代码无需重新构建镜像 |
+| `/home/qoder/repo` | `~/qoder/repo` | Qoder 生成的代码工作区 |
+| `/home/qoder/logs` | `~/logs` | 应用日志文件 |
+
+> **提示**：由于源代码通过 volume 挂载，修改代码后只需 `docker compose restart qoder-gateway` 即可生效。仅当 `requirements.txt` 变更时才需要重新构建（`--build`）。
 
 ### 架构
 

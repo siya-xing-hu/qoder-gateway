@@ -199,17 +199,31 @@ cp .env.example .env
 | `QODER_STREAMING_READ_TIMEOUT` | Streaming read timeout (seconds) | `300` |
 | `QODER_FIRST_TOKEN_MAX_RETRIES` | Max retries for streaming requests | `3` |
 
-### Database (Optional)
+### Workspace & Logging
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `QODER_WORKSPACE` | Working directory for qodercli — generated code is stored here | `/home/qoder/repo` |
+| `LOG_DIR` | Log file output directory | `logs` |
 | `DATABASE_URL` | PostgreSQL connection URL | — (logs to console only) |
 
-> When using Docker Compose, `DATABASE_URL` is automatically configured to use the bundled PostgreSQL instance.
+> When using Docker Compose, `QODER_WORKSPACE`, `LOG_DIR` and `DATABASE_URL` are automatically configured. Generated code is mapped to `~/qoder/repo` on the host, and logs to `~/logs`.
 
 ---
 
 ## 🐳 Docker Deployment
+
+### Volume Mounts
+
+Docker Compose maps three directories between container and host:
+
+| Container Path | Host Path | Description |
+|---------------|-----------|-------------|
+| `/app` | `.` (project dir) | Application source code — no rebuild needed on code changes |
+| `/home/qoder/repo` | `~/qoder/repo` | Qoder-generated code workspace |
+| `/home/qoder/logs` | `~/logs` | Application log files |
+
+> **Tip**: Since the source code is mounted via volume, you only need `docker compose restart qoder-gateway` after code changes. Rebuild (`--build`) is only needed when `requirements.txt` changes.
 
 ### Architecture
 

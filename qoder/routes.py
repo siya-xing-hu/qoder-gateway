@@ -25,6 +25,7 @@ from loguru import logger
 from qoder.config import (
     QODER_PROXY_API_KEY,
     QODER_DEFAULT_MODELS,
+    QODER_WORKSPACE,
     APP_VERSION,
 )
 from qoder.models import (
@@ -146,6 +147,7 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                     async for content in cli_client.chat_completion_stream(
                         messages=messages,
                         model=request_data.model,
+                        workspace=QODER_WORKSPACE,
                     ):
                         chunk = {
                             "id": chunk_id,
@@ -189,6 +191,7 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                 stream=False,
                 temperature=request_data.temperature,
                 max_tokens=request_data.max_tokens,
+                workspace=QODER_WORKSPACE,
             )
 
             logger.info("POST /v1/chat/completions (non-streaming) - completed")

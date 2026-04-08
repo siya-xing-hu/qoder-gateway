@@ -35,9 +35,11 @@ services:
       - SERVER_PORT=11435
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password123}@shared-postgres:5432/${POSTGRES_DB:-qoder}
       - LOG_DIR=/home/qoder/logs
+      - QODER_WORKSPACE=/home/qoder/repo
     volumes:
       - .:/app
-      - ~/qoder-workspace:/home/qoder
+      - ~/qoder/repo:/home/qoder/repo
+      - ~/logs:/home/qoder/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11435/health"]
       interval: 30s
