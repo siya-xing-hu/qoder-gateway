@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Qoder Gateway - Request Logs</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
+  .header { background: #1a1a2e; color: #fff; padding: 20px 32px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header .db-badge { font-size: 12px; padding: 4px 10px; border-radius: 12px; }
+  .db-on { background: #2ecc71; color: #fff; }
+  .db-off { background: #e74c3c; color: #fff; }
+  .filters { padding: 16px 32px; background: #fff; border-bottom: 1px solid #e0e0e0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .filters label { font-size: 13px; color: #666; }
+  .filters input, .filters select { padding: 6px 10px; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 13px; outline: none; }
+  .filters input:focus, .filters select:focus { border-color: #4a90d9; }
+  .filters button { padding: 6px 16px; background: #4a90d9; color: #fff; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .filters button:hover { background: #357abd; }
+  .filters .reset-btn { background: #999; }
+  .filters .reset-btn:hover { background: #777; }
+  .container { padding: 20px 32px; }
+  .stats { display: flex; gap: 16px; margin-bottom: 16px; font-size: 13px; color: #666; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  thead th { background: #f8f9fa; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600; color: #555; text-transform: uppercase; border-bottom: 2px solid #e0e0e0; }
+  tbody td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+  tbody tr { cursor: pointer; transition: background 0.15s; }
+  tbody tr:hover { background: #f0f5ff; }
+  .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+  .s2xx { background: #d4edda; color: #155724; }
+  .s4xx { background: #fff3cd; color: #856404; }
+  .s5xx { background: #f8d7da; color: #721c24; }
+  .method { font-weight: 600; font-size: 12px; }
+  .method-GET { color: #2ecc71; }
+  .method-POST { color: #3498db; }
+  .stream-tag { font-size: 11px; background: #e8f4fd; color: #2980b9; padding: 1px 6px; border-radius: 8px; margin-left: 4px; }
+  .detail-row { display: none; }
+  .detail-row.open { display: table-row; }
+  .detail-row td { background: #fafbfc; padding: 12px 14px; }
+  .detail-content { font-size: 12px; line-height: 1.8; }
+  .detail-content pre { background: #f0f0f0; padding: 8px 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; margin-top: 6px; white-space: pre-wrap; word-break: break-all; }
+  .detail-content .label { font-weight: 600; color: #555; }
+  .pagination { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 20px; }
+  .pagination button { padding: 6px 14px; border: 1px solid #d0d0d0; background: #fff; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .pagination button:hover { background: #f0f0f0; }
+  .pagination button:disabled { opacity: 0.4; cursor: default; }
+  .pagination .page-info { font-size: 13px; color: #666; }
+  .empty { text-align: center; padding: 60px 20px; color: #999; font-size: 15px; }
+  .loading { text-align: center; padding: 40px; color: #999; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Qoder Gateway - Request Logs</h1>
+  <span class="db-badge {{ 'db-on' if db_available else 'db-off' }}">
+    {{ 'Database Connected' if db_available else 'Database Not Configured' }}
+  </span>
+</div>
+
+<div class="filters">
+  <label>Path:</label>
+  <input type="text" id="filterPath" placeholder="/v1/chat/completions" value="">
+  <label>Status:</label>
+  <select id="filterStatus">
+    <option value="">All</option>
+    <option value="200">200</option>
+    <option value="400">400</option>
+    <option value="401">401</option>
+    <option value="500">500</option>
+    <option value="503">503</option>
+  </select>
+  <label>Model:</label>
+  <input type="text" id="filterModel" placeholder="auto" value="">
+  <button onclick="loadLogs(1)">Search</button>
+  <button class="reset-btn" onclick="resetFilters()">Reset</button>
+</div>
+
+<div class="container">
+  <div class="stats" id="stats"></div>
+  <div id="content"><div class="loading">Loading...</div></div>
+  <div class="pagination" id="pagination"></div>
+</div>
+
+<script>
+let currentPage = 1;
+
+function getStatusClass(code) {
+  if (code >= 200 && code < 300) return 's2xx';
+  if (code >= 400 && code < 500) return 's4xx';
+  return 's5xx';
+}
+
+function formatTime(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  return d.toLocaleString('zh-CN', { hour12: false });
+}
+
+function toggleDetail(id) {
+  const row = document.getElementById('detail-' + id);
+  if (row) row.classList.toggle('open');
+}
+
+function resetFilters() {
+  document.getElementById('filterPath').value = '';
+  document.getElementById('filterStatus').value = '';
+  document.getElementById('filterModel').value = '';
+  loadLogs(1);
+}
+
+async function loadLogs(page) {
+  currentPage = page;
+  const path = document.getElementById('filterPath').value;
+  const status = document.getElementById('filterStatus').value;
+  const model = document.getElementById('filterModel').value;
+
+  const params = new URLSearchParams({ page, page_size: 50 });
+  if (path) params.set('path', path);
+  if (status) params.set('status_code', status);
+  if (model) params.set('model', model);
+
+  const content = document.getElementById('content');
+  content.innerHTML = '<div class="loading">Loading...</div>';
+
+  try {
+    const res = await fetch('/api/logs?' + params.toString());
+    const data = await res.json();
+    renderTable(data);
+    renderPagination(data);
+    document.getElementById('stats').innerHTML =
+      `Total: <strong>${data.total}</strong> records | Page ${data.page} / ${data.pages}`;
+  } catch (e) {
+    content.innerHTML = '<div class="empty">Failed to load logs: ' + e.message + '</div>';
+  }
+}
+
+function renderTable(data) {
+  const content = document.getElementById('content');
+  if (!data.items || data.items.length === 0) {
+    content.innerHTML = '<div class="empty">No logs found</div>';
+    return;
+  }
+
+  let html = `<table><thead><tr>
+    <th>Time</th><th>Method</th><th>Path</th><th>Status</th>
+    <th>Duration</th><th>Model</th><th>Messages</th><th>Client IP</th>
+  </tr></thead><tbody>`;
+
+  for (const item of data.items) {
+    const sc = getStatusClass(item.status_code);
+    const streamTag = item.request_stream ? '<span class="stream-tag">stream</span>' : '';
+    html += `<tr onclick="toggleDetail(${item.id})">
+      <td>${formatTime(item.timestamp)}</td>
+      <td><span class="method method-${item.method}">${item.method}</span></td>
+      <td>${item.path || '-'}</td>
+      <td><span class="status ${sc}">${item.status_code}</span></td>
+      <td>${item.duration_ms != null ? item.duration_ms.toFixed(0) + 'ms' : '-'}</td>
+      <td>${item.request_model || '-'}${streamTag}</td>
+      <td>${item.request_messages_count != null ? item.request_messages_count : '-'}</td>
+      <td>${item.client_ip || '-'}</td>
+    </tr>`;
+    html += `<tr class="detail-row" id="detail-${item.id}"><td colspan="8"><div class="detail-content">`;
+    if (item.request_body) {
+      let formatted = item.request_body;
+      try { formatted = JSON.stringify(JSON.parse(item.request_body), null, 2); } catch(e) {}
+      html += `<span class="label">Request Body:</span><pre>${escapeHtml(formatted)}</pre>`;
+    }
+    if (item.response_summary) {
+      html += `<span class="label">Response:</span><pre>${escapeHtml(item.response_summary)}</pre>`;
+    }
+    if (item.error_message) {
+      html += `<span class="label">Error:</span><pre>${escapeHtml(item.error_message)}</pre>`;
+    }
+    if (!item.response_summary && !item.error_message) {
+      html += '<span style="color:#999">No additional details</span>';
+    }
+    html += '</div></td></tr>';
+  }
+  html += '</tbody></table>';
+  content.innerHTML = html;
+}
+
+function renderPagination(data) {
+  const el = document.getElementById('pagination');
+  if (data.pages <= 1) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <button ${data.page <= 1 ? 'disabled' : ''} onclick="loadLogs(${data.page - 1})">Prev</button>
+    <span class="page-info">${data.page} / ${data.pages}</span>
+    <button ${data.page >= data.pages ? 'disabled' : ''} onclick="loadLogs(${data.page + 1})">Next</button>
+  `;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+loadLogs(1);
+</script>
+</body>
+</html>

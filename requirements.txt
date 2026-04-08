@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+httpx
+loguru
+python-dotenv
+pydantic
+typing_extensions
+sqlalchemy[asyncio]
+asyncpg
+jinja2
