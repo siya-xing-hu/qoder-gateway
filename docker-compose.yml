@@ -38,7 +38,7 @@ services:
       - QODER_WORKSPACE=/home/qoder/repo
     volumes:
       - .:/app
-      - ~/qoder/repo:/home/qoder/repo
+      - ~/repo:/home/qoder/repo
       - ~/logs:/home/qoder/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11435/health"]
