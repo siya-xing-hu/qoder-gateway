@@ -47,6 +47,19 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def startup_event():
         """Application startup tasks."""
+        # Configure loguru file logging
+        if LOG_DIR:
+            os.makedirs(LOG_DIR, exist_ok=True)
+            logger.add(
+                os.path.join(LOG_DIR, "qoder-gateway_{time:YYYY-MM-DD}.log"),
+                level=LOG_LEVEL,
+                rotation="00:00",
+                retention="30 days",
+                compression="gz",
+                encoding="utf-8",
+            )
+            logger.info(f"File logging enabled: {LOG_DIR}/")
+
         # Initialize database (no-op if DATABASE_URL not set)
         await init_db()
 
