@@ -30,8 +30,8 @@ request_logs = Table(
     Column("timestamp", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)),
     Column("method", String(10)),
     Column("path", String(512)),
-    Column("status_code", Integer),
-    Column("duration_ms", Float),
+    Column("status_code", Integer, nullable=True),
+    Column("duration_ms", Float, nullable=True),
     Column("client_ip", String(45)),
     Column("request_model", String(64), nullable=True),
     Column("request_messages_count", Integer, nullable=True),
@@ -39,6 +39,7 @@ request_logs = Table(
     Column("request_body", Text, nullable=True),
     Column("response_summary", Text, nullable=True),
     Column("error_message", Text, nullable=True),
+    Column("completed", Boolean, default=False),
 )
 
 # Engine and session factory (initialized lazily)
@@ -147,13 +148,12 @@ async def save_request(
                     timestamp=datetime.now(timezone.utc),
                     method=method,
                     path=path,
-                    status_code=0,  # pending
-                    duration_ms=0,
                     client_ip=client_ip,
                     request_model=request_model,
                     request_messages_count=request_messages_count,
                     request_stream=request_stream,
                     request_body=request_body[:10000] if request_body else None,
+                    completed=False,
                 )
             )
             await session.commit()
@@ -185,6 +185,7 @@ async def update_response(
                     duration_ms=round(duration_ms, 2),
                     response_summary=response_summary[:2000] if response_summary else None,
                     error_message=error_message[:2000] if error_message else None,
+                    completed=True,
                 )
             )
             await session.commit()
@@ -253,6 +254,7 @@ async def get_logs(
                     "request_body": row.request_body,
                     "response_summary": row.response_summary,
                     "error_message": row.error_message,
+                    "completed": row.completed,
                 })
 
             pages = (total + page_size - 1) // page_size if total > 0 else 0

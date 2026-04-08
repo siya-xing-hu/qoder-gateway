@@ -91,9 +91,6 @@ class QoderCliClient:
 
         cmd = [self.cli_path, "-p"]
 
-        if workspace:
-            cmd.extend(["-w", workspace])
-
         cmd.append(prompt)
         cmd.extend(["--model", tier])
 
@@ -104,6 +101,7 @@ class QoderCliClient:
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=workspace,
             )
 
             stdout, stderr = await process.communicate()
@@ -145,9 +143,6 @@ class QoderCliClient:
 
         cmd = [self.cli_path, "-p"]
 
-        if workspace:
-            cmd.extend(["-w", workspace])
-
         cmd.append(prompt)
         cmd.extend(["--model", tier, "--output-format", "stream-json"])
 
@@ -158,6 +153,7 @@ class QoderCliClient:
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=workspace,
             )
 
             assert process.stdout is not None
