@@ -4,6 +4,10 @@
 </p>
 
 <p align="center">
+  <strong>English</strong> | <a href="./README_CN.md">中文</a>
+</p>
+
+<p align="center">
   <a href="#-quick-start">Quick Start</a> •
   <a href="#-available-models">Models</a> •
   <a href="#-features">Features</a> •
@@ -393,4 +397,4 @@ qoder-gateway/
 
 ## 📄 License
 
-MIT
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
