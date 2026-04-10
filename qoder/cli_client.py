@@ -154,6 +154,7 @@ class QoderCliClient:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=workspace,
+                limit=10 * 1024 * 1024,  # 10MB, avoid readline() limit on large JSON lines
             )
 
             assert process.stdout is not None
