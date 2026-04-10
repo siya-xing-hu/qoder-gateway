@@ -22,6 +22,7 @@ from loguru import logger
 
 from qoder.config import QODER_PROXY_API_KEY, QODER_WORKSPACE, resolve_model_id
 from qoder.cli_client import get_cli_client, QoderCliClient
+from qoder.tokenizer import count_tokens, estimate_request_tokens
 from qoder.models_anthropic import (
     AnthropicMessagesRequest,
     AnthropicMessagesResponse,
@@ -241,6 +242,9 @@ async def messages(
     # Resolve model to qodercli model tier
     model_tier = resolve_model_id(request_data.model)
 
+    # Estimate input tokens for the request
+    input_tokens = estimate_request_tokens(openai_messages, system_prompt=system_prompt)["total_tokens"]
+
     try:
         if request_data.stream:
             async def stream_wrapper():
@@ -258,7 +262,7 @@ async def messages(
                         "content": [],
                         "stop_reason": None,
                         "stop_sequence": None,
-                        "usage": {"input_tokens": 0, "output_tokens": 0}
+                        "usage": {"input_tokens": input_tokens, "output_tokens": 0}
                     }
 
                     # message_start event
@@ -277,19 +281,22 @@ async def messages(
                     yield f"event: content_block_start\ndata: {json.dumps(content_block_start)}\n\n"
 
                     # Stream content deltas
-                    output_tokens = 0
+                    collected_text = ""
                     async for content in cli_client.chat_completion_stream(
                         messages=openai_messages,
                         model=model_tier,
                         workspace=QODER_WORKSPACE,
                     ):
-                        output_tokens += 1  # rough estimate
+                        collected_text += content
                         content_block_delta = {
                             "type": "content_block_delta",
                             "index": 0,
                             "delta": {"type": "text_delta", "text": content}
                         }
                         yield f"event: content_block_delta\ndata: {json.dumps(content_block_delta)}\n\n"
+
+                    # Calculate real output token count
+                    output_tokens = count_tokens(collected_text)
 
                     # content_block_stop event
                     content_block_stop = {
@@ -344,9 +351,13 @@ async def messages(
 
             # Extract response text
             response_text = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            response_text_stripped = response_text.strip()
+
+            # Calculate real output token count
+            output_tokens = count_tokens(response_text_stripped)
 
             # Build Anthropic-compatible response
-            content_blocks = [TextContentBlock(type="text", text=response_text.strip())]
+            content_blocks = [TextContentBlock(type="text", text=response_text_stripped)]
 
             anthropic_response = AnthropicMessagesResponse(
                 id=f"msg_{uuid.uuid4().hex[:24]}",
@@ -357,8 +368,8 @@ async def messages(
                 stop_reason="end_turn",
                 stop_sequence=None,
                 usage=AnthropicUsage(
-                    input_tokens=0,
-                    output_tokens=0,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
                 )
             )
 
