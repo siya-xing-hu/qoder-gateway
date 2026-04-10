@@ -30,7 +30,10 @@ from qoder.database import save_request, update_response
 
 
 def _extract_sse_content(chunk_text: str) -> Optional[str]:
-    """Extract text content from an SSE data line."""
+    """Extract text content from an SSE data line.
+
+    Supports both OpenAI and Anthropic SSE formats.
+    """
     for line in chunk_text.strip().split("\n"):
         line = line.strip()
         if not line.startswith("data: "):
@@ -40,10 +43,21 @@ def _extract_sse_content(chunk_text: str) -> Optional[str]:
             return None
         try:
             obj = json.loads(data)
+
+            # OpenAI format: choices[0].delta.content
             choices = obj.get("choices", [])
             if choices:
                 delta = choices[0].get("delta", {})
-                return delta.get("content")
+                content = delta.get("content")
+                if content:
+                    return content
+
+            # Anthropic format: content_block_delta.delta.text
+            if obj.get("type") == "content_block_delta":
+                delta = obj.get("delta", {})
+                if delta.get("type") == "text_delta":
+                    return delta.get("text")
+
         except (json.JSONDecodeError, IndexError, KeyError):
             pass
     return None
