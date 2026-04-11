@@ -25,6 +25,7 @@ from qoder.config import (
     QODER_PROXY_API_KEY,
 )
 from qoder.routes import router
+from qoder.routes_anthropic import router as anthropic_router
 from qoder.cli_client import get_cli_client
 from qoder.middleware import RequestLoggingMiddleware
 from qoder.database import init_db, close_db
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
 
     # Include routes
     app.include_router(router)
+    app.include_router(anthropic_router)
 
     # Add request logging middleware
     app.add_middleware(RequestLoggingMiddleware)

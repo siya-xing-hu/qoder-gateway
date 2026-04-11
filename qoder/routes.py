@@ -36,6 +36,7 @@ from qoder.models import (
 from qoder.cli_client import get_cli_client, QoderCliClient
 from qoder.converters import validate_request
 from qoder.database import get_logs, is_db_available
+from qoder.tokenizer import count_tokens, estimate_request_tokens
 
 
 # --- Security scheme ---
@@ -123,6 +124,9 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
             "content": msg.content
         })
 
+    # Estimate input tokens
+    input_tokens = estimate_request_tokens(messages)["total_tokens"]
+
     try:
         if request_data.stream:
             async def stream_wrapper():
@@ -144,11 +148,13 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                     }
                     yield f"data: {json.dumps(initial_chunk)}\n\n"
 
+                    collected_text = ""
                     async for content in cli_client.chat_completion_stream(
                         messages=messages,
                         model=request_data.model,
                         workspace=QODER_WORKSPACE,
                     ):
+                        collected_text += content
                         chunk = {
                             "id": chunk_id,
                             "object": "chat.completion.chunk",
@@ -162,6 +168,8 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                         }
                         yield f"data: {json.dumps(chunk)}\n\n"
 
+                    output_tokens = count_tokens(collected_text)
+
                     final_chunk = {
                         "id": chunk_id,
                         "object": "chat.completion.chunk",
@@ -171,7 +179,12 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                             "index": 0,
                             "delta": {},
                             "finish_reason": "stop"
-                        }]
+                        }],
+                        "usage": {
+                            "prompt_tokens": input_tokens,
+                            "completion_tokens": output_tokens,
+                            "total_tokens": input_tokens + output_tokens,
+                        }
                     }
                     yield f"data: {json.dumps(final_chunk)}\n\n"
                     yield "data: [DONE]\n\n"
@@ -193,6 +206,16 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                 max_tokens=request_data.max_tokens,
                 workspace=QODER_WORKSPACE,
             )
+
+            # Update response with real token counts
+            response_text = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            output_tokens = count_tokens(response_text)
+
+            response["usage"] = {
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens,
+            }
 
             logger.info("POST /v1/chat/completions (non-streaming) - completed")
 

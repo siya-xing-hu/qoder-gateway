@@ -70,7 +70,7 @@ LOG_DIR: Optional[str] = os.getenv("LOG_DIR", "logs")
 STREAM_LOG_INTERVAL: int = int(os.getenv("STREAM_LOG_INTERVAL", "5"))  # seconds
 
 # Workspace directory for qodercli (where generated code is stored)
-QODER_WORKSPACE: str = os.getenv("QODER_WORKSPACE", "/home/qoder/repo")
+QODER_WORKSPACE: Optional[str] = os.getenv("QODER_WORKSPACE") or None
 
 
 # ==================================================================================================
